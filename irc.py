@@ -20,4 +20,7 @@ threading.Thread(target=recv_msg, daemon=True).start()
 s.send(nickname.encode('utf-8'))
 # On envoie des commandes au serveur
 while True:
-    s.send(input("> ").encode("utf-8"))
+    cmd = input("> ").strip()
+    s.send(cmd.encode("utf-8"))
+    if cmd.startswith("/exit"):
+        break
