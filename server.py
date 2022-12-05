@@ -1,7 +1,9 @@
 import socket
 import threading
-import sys
-import time
+import datetime as dt
+
+def logging(msg):
+    return f"[{dt.datetime.now().strftime('%Y-%d-%m %H:%M:%S')}] {msg}"
 
 help = \
 """
@@ -28,11 +30,18 @@ help = \
 default_error = "DEFAULT_ERROR"
 
 def exec_cmd(sc):
+    # Récupération du nickname
+    nickname = sc.recv(1024).decode('utf-8')
+    print(logging(f"<{nickname}> is connected"))
     while True:
         # Comment déterminer la taille adéquate ?
         # Comment savoir si le message dépasse la taille maximale ?
         # sys.getsizeof(...)
-        cmd = sc.recv(1024).decode('utf-8')
+        # On peut avertir l'utilisateur que la taille du message est tronquée
+        # si elle dépasse un certain nombre de caractères
+        # Mais en UTF-8 le nombre de bytes par caractère n'est pas fixe
+        cmd = sc.recv(1024).decode('utf-8').strip()
+        print(logging(f"<{nickname}> {cmd}"))
         # Exécution de la commande
         if cmd.startswith("/help"):
             sc.send(help.encode('utf-8'))

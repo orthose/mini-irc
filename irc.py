@@ -1,5 +1,8 @@
 import socket
 import threading
+import sys
+
+nickname = sys.argv[1]
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -13,6 +16,8 @@ def recv_msg():
 
 threading.Thread(target=recv_msg, daemon=True).start()
 
+# On commence par envoyer notre nickname
+s.send(nickname.encode('utf-8'))
 # On envoie des commandes au serveur
 while True:
-    s.send(input("> ").lower().strip().encode("utf-8"))
+    s.send(input("> ").encode("utf-8"))
