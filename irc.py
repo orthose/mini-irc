@@ -4,6 +4,11 @@ import sys
 
 nickname = sys.argv[1]
 
+welcome = \
+f"""Bienvenue <{nickname}> sur Mini IRC
+Tapez /help pour voir les commandes"""
+print(welcome)
+
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 s.connect(("localhost", 9999))

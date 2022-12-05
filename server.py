@@ -6,8 +6,7 @@ def logging(msg):
     print(f"[{dt.datetime.now().strftime('%Y-%d-%m %H:%M:%S')}] {msg}")
 
 help = \
-"""
-/away [message]  Signale son absence quand on nous envoie un message en privé
+"""/away [message]  Signale son absence quand on nous envoie un message en privé
                  (en réponse un message peut être envoyé).
                  Une nouvelle commande /away réactive l’utilisateur.
 
@@ -26,8 +25,7 @@ help = \
 /names [channel]  Affiche les utilisateurs connectés à un canal. Si le canal n’est pas spécifié,
                   affiche tous les utilisateurs de tous les canaux.
 
-/exit  Quitte l'IRC en fermant la connexion avec le serveur.
-"""
+/exit  Quitte l'IRC en fermant la connexion avec le serveur."""
 
 default_error = "DEFAULT_ERROR"
 
@@ -60,6 +58,8 @@ s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 s.bind(("localhost", 9999))
 # Le serveur peut traiter jusqu'à 100 connexions
 s.listen(100)
+
+logging("Serveur Mini IRC démarré en attente de clients...")
 # Attente de clients
 while True:
     sc, ip_client = s.accept()
