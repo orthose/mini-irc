@@ -63,6 +63,9 @@ def exec_cmd(sc):
         elif cmd[0] == "/join":
             server.join(cmd, nickname)
 
+        elif cmd[0] == "/list":
+            server.list(nickname)
+
         # Si le socket est brisé il faudra réaliser les mêmes opérations
         elif cmd[0] == "/exit":
             logging(f"<{nickname}> is disconnected")

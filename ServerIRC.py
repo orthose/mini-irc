@@ -191,3 +191,14 @@ class ServerIRC:
             # La clé de sécurité est incorrecte
             else:
                 with lock_sc: sc.send(CHANNEL_KEY_ERROR)
+
+
+    def list(self, nickname):
+        """
+        Affiche la liste des canaux sur IRC.
+
+        :param nickname: Pseudo de l'utilisateur
+        """
+        sc, lock_sc = self.__socket(nickname)
+        list_channels = '\n'.join(list(self.channels.keys())).encode('utf-8')
+        with lock_sc: sc.send(list_channels)
