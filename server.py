@@ -30,19 +30,23 @@ HELP = \
 
 default_channel = "#default"
 
-# ATTENTION: Les collections ne sont pas thread-safe
-# et doivent être verrouillées en lecture / écriture / suppression
+# Les collections sont supposées thread-safe en CPython
+# Cependant pour éviter des collisions de clé des verrous sont nécessaires:
+# 1. Pour l'enregistrement d'un nouvel utilisateur
+# 2. Pour la création d'un nouveau canal
+
+# Les sockets ne sont pas thread-safe et devront être verrouillés
 
 # On n'enregistre pas les messages de manière persistante
 # Le rôle du serveur est simplement de router les messages entre les clients
 # pour les conversations privées ou de les diffuser à plusieurs clients pour les canaux
 
-# Dictionnaire des canaux avec ensemble des utilisateurs connectés
-lock_channels = threading.Lock()
-channels = {default_channel: {"key": None, "users": set(), "lock_users": threading.Lock()}}
-# Dictionnaire du canal courant d'un utilisateur
+# Dictionnaire des informations utilisateurs
 lock_users = threading.Lock()
 users = dict()
+# Dictionnaire des canaux avec ensemble des utilisateurs connectés
+lock_channels = threading.Lock()
+channels = {default_channel: {"key": None, "users": set()}}
 
 # TODO: Décomposer en sous-fonction chaque commande
 def exec_cmd(sc):
@@ -65,8 +69,7 @@ def exec_cmd(sc):
         sc.send(default_channel.encode('utf-8'))
 
     # Ajout de l'utilisateur au canal par défaut
-    with channels[default_channel]["lock_users"]:
-        channels[default_channel]["users"].add(nickname)
+    channels[default_channel]["users"].add(nickname)
 
     ### Étape 2 : Réception et exécution des commandes client ###
 
@@ -97,20 +100,18 @@ def exec_cmd(sc):
                 if len(cmd) == 3:
                     key = cmd[2]
 
-                # Création du canal
+                # Création éventuelle du canal
                 with lock_channels:
                     if chan not in channels:
-                        channels[chan] = {"key": key, "users": set(), "lock_users": threading.Lock()}
+                        channels[chan] = {"key": key, "users": set()}
 
                 # Connexion au canal
                 if channels[chan]["key"] == key:
-                    with channels[chan]["lock_users"]:
-                        channels[chan]["users"].add(nickname)
+                    channels[chan]["users"].add(nickname)
 
                     # Déconnexion de l'utilisateur du canal précédent
                     if users[nickname]["channel"] != chan:
-                        with channels[users[nickname]["channel"]]["lock_users"]:
-                            channels[users[nickname]["channel"]]["users"].remove(nickname)
+                        channels[users[nickname]["channel"]]["users"].remove(nickname)
 
                     # Connexion de l'utilisateur au canal choisi
                     users[nickname]["channel"] = chan
@@ -127,12 +128,10 @@ def exec_cmd(sc):
             logging(f"<{nickname}> is disconnected")
 
             # On retire l'utilisateur du canal sur lequel il est connecté
-            with channels[users[nickname]["channel"]]["lock_users"]:
-                channels[users[nickname]["channel"]]["users"].remove(nickname)
+            channels[users[nickname]["channel"]]["users"].remove(nickname)
 
             # On supprime l'utilisateur
-            with lock_users:
-                users.pop(nickname)
+            users.pop(nickname)
 
             # On ferme la connexion et on arrête le thread
             sc.close()
