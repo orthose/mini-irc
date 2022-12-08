@@ -47,7 +47,7 @@ def recv_msg():
 
 threading.Thread(target=recv_msg, daemon=True).start()
 
-### Étape 3 : Envoie de commandes au serveur ###
+### Étape 3 : Envoi de commandes au serveur ###
 
 # On envoie des commandes au serveur
 print(welcome)

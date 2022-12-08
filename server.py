@@ -40,14 +40,13 @@ default_error = "DEFAULT_ERROR"
 # ATTENTION: Les collections ne sont pas thread-safe
 # et doivent être verrouillées en lecture / écriture / suppression
 
+# On n'enregistre pas les messages de manière persistante
+# Le rôle du serveur est simplement de router les messages entre les clients
+# pour les conversations privées ou de les diffuser à plusieurs clients pour les canaux
+
 # Dictionnaire des canaux avec ensemble des utilisateurs connectés
 lock_channels = threading.Lock()
-channels = {default_channel: {
-        "key": None,
-        "users": set(), "lock_users": threading.Lock(),
-        "msg": [], "lock_msg": threading.Lock()
-    }
-}
+channels = {default_channel: {"key": None, "users": set(), "lock_users": threading.Lock()}}
 # Dictionnaire du canal courant d'un utilisateur
 lock_users = threading.Lock()
 users = dict()
@@ -67,7 +66,7 @@ def exec_cmd(sc):
         sc.close()
         return
     else:
-        users[nickname] = {"channel": default_channel, "msg": dict(), "lock_msg": threading.Lock()}
+        users[nickname] = {"channel": default_channel, "socket": sc, "lock_socket": threading.Lock()}
         lock_users.release()
         sc.send(default_channel.encode('utf-8'))
 
@@ -107,11 +106,7 @@ def exec_cmd(sc):
                 # Création du canal
                 with lock_channels:
                     if chan not in channels:
-                        channels[chan] = {
-                            "key": key,
-                            "users": set(), "lock_users": threading.Lock(),
-                            "msg": [], "lock_msg": threading.Lock()
-                        }
+                        channels[chan] = {"key": key, "users": set(), "lock_users": threading.Lock()}
 
                 # Connexion au canal
                 if channels[chan]["key"] == key:
