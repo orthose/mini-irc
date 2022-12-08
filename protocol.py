@@ -7,6 +7,9 @@ NICKNAME_ERROR = "NICKNAME_ERROR".encode('utf-8')
 # Les arguments de la commande sont incorrects
 ARGUMENT_ERROR = "ARGUMENT_ERROR".encode('utf-8')
 
+# Le canal n'existe pas
+CHANNEL_ERROR = "CHANNEL_ERROR".encode('utf-8')
+
 # La clé de sécurité du canal est incorrecte
 CHANNEL_KEY_ERROR = "CHANNEL_KEY_ERROR".encode('utf-8')
 

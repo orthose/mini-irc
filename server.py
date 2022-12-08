@@ -1,6 +1,7 @@
 import socket
 import threading
 import datetime as dt
+import shlex
 from ServerIRC import ServerIRC
 
 def logging(msg):
@@ -50,8 +51,9 @@ def exec_cmd(sc):
         #print(server.channels)
         #print(server.users)
         # On ne gère pas les messages tronqués pour le moment
-        cmd = sc.recv(1024).decode('utf-8').split()
-        logging(f"<{nickname}> {' '.join(cmd)}")
+        raw_cmd = sc.recv(1024).decode('utf-8').strip()
+        cmd = raw_cmd.split()
+        logging(f"<{nickname}> {raw_cmd}")
 
         # Exécution de la commande
         if cmd[0] == "/help":
@@ -65,6 +67,11 @@ def exec_cmd(sc):
 
         elif cmd[0] == "/list":
             server.list(nickname)
+
+        elif cmd[0] == "/msg":
+            # Reformatage de la commande pour prendre en compte les quotes
+            cmd = shlex.split(raw_cmd, posix=True)
+            server.msg(cmd, nickname)
 
         # Si le socket est brisé il faudra réaliser les mêmes opérations
         elif cmd[0] == "/exit":

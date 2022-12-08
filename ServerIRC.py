@@ -43,6 +43,19 @@ class ServerIRC:
         return (self.users[nickname]["socket"], self.users[nickname]["lock_socket"])
 
 
+    def __send(self, msg: bytes, nickname: str):
+        sc, lock_sc = self.__socket(nickname)
+        with lock_sc: sc.send(msg)
+
+
+    def __broadcast(self, msg: bytes, dest_users: List[str]):
+        # Envoi du message à un ensemble d'utilisateurs
+        for dest_nick in dest_users:
+            # Il faut s'assurer que le destinataire n'est pas supprimé
+            with self.lock_users:
+                if dest_nick in self.users: self.__send(msg, dest_nick)
+
+
     def add_user(self, socket_client: socket.socket, nickname: str) -> bool:
         """
         Permet d'ajouter un nouvel utilisateur qui vient de se connecter.
@@ -94,14 +107,13 @@ class ServerIRC:
         with lock_sc: sc.close()
 
 
-    def unknown_cmd(self, nickname):
+    def unknown_cmd(self, nickname: str):
         """
         Permet de signaler au client que la commande soumise est inconnue.
 
         :param nickname: Pseudo de l'utilisateur
         """
-        sc, lock_sc = self.__socket(nickname)
-        with lock_sc: sc.send(UNKNOWN_CMD_ERROR)
+        self.__send(UNKNOWN_CMD_ERROR, nickname)
 
 
     def help(self, nickname: str):
@@ -110,8 +122,7 @@ class ServerIRC:
 
         :param nickname: Pseudo de l'utilisateur
         """
-        sc, lock_sc = self.__socket(nickname)
-        with lock_sc: sc.send(self.help_msg)
+        self.__send(self.help_msg, nickname)
 
 
     def invite(self, cmd: List[str], nickname: str):
@@ -121,11 +132,9 @@ class ServerIRC:
         :param cmd: Liste de la commande décomposée selon les espaces
         :param nickname: Pseudo de l'utilisateur
         """
-        sc, lock_sc = self.__socket(nickname)
-
         # Nombre d'arguments invalide
         if len(cmd) != 2:
-            with lock_sc: sc.send(ARGUMENT_ERROR)
+            self.__send(ARGUMENT_ERROR, nickname)
         else:
             dest_nick = cmd[1]  # Pseudo du destinataire
             # Il ne faut pas que le client destinataire soit supprimé
@@ -134,9 +143,8 @@ class ServerIRC:
             # Le destinataire n'existe pas
             if dest_nick not in self.users:
                 self.lock_users.release()
-                with lock_sc: sc.send(NICKNAME_ERROR)
+                self.__send(NICKNAME_ERROR, nickname)
             else:
-                sc_dest, lock_sc_dest = self.__socket(dest_nick)
                 # Canal courant de l'utilisateur invitant
                 chan = self.users[nickname]["channel"]
                 key = self.channels[chan]["key"]
@@ -145,7 +153,7 @@ class ServerIRC:
                 if key is not None:
                     invite += f"\nMot de passe : [{key}]."
                 # Envoi de l'invitation au destinataire
-                with lock_sc_dest: sc_dest.send(invite.encode('utf-8'))
+                self.__send(invite.encode('utf-8'), dest_nick)
                 self.lock_users.release()
 
 
@@ -157,11 +165,9 @@ class ServerIRC:
         :param cmd: Liste de la commande décomposée selon les espaces
         :param nickname: Pseudo de l'utilisateur
         """
-        sc, lock_sc = self.__socket(nickname)
-
         # Nombre d'arguments invalide
         if not (2 <= len(cmd) <= 3):
-            with lock_sc: sc.send(ARGUMENT_ERROR)
+            self.__send(ARGUMENT_ERROR, nickname)
         else:
             chan = '#'+cmd[1].replace('#', '')
 
@@ -186,19 +192,67 @@ class ServerIRC:
                 self.users[nickname]["channel"] = chan
 
                 # Envoi du canal au client
-                with lock_sc: sc.send(("/join "+chan).encode('utf-8'))
+                self.__send(("/join "+chan).encode('utf-8'), nickname)
 
             # La clé de sécurité est incorrecte
             else:
-                with lock_sc: sc.send(CHANNEL_KEY_ERROR)
+                self.__send(CHANNEL_KEY_ERROR, nickname)
 
 
-    def list(self, nickname):
+    def list(self, nickname: str):
         """
         Affiche la liste des canaux sur IRC.
 
         :param nickname: Pseudo de l'utilisateur
         """
-        sc, lock_sc = self.__socket(nickname)
         list_channels = '\n'.join(list(self.channels.keys())).encode('utf-8')
-        with lock_sc: sc.send(list_channels)
+        self.__send(list_channels, nickname)
+
+
+    def msg(self, cmd: List[str], nickname: str):
+        """
+        Pour envoyer un message à un utilisateur ou sur un canal (où on est
+        présent ou pas). Les arguments canal ou nick sont optionnels.
+
+        :param cmd: Liste de la commande décomposée selon les espaces
+        :param nickname: Pseudo de l'utilisateur
+        """
+        # Nombre d'arguments invalide
+        if not (2 <= len(cmd) <= 3):
+            self.__send(ARGUMENT_ERROR, nickname)
+        else:
+            msg = cmd[-1]
+            dest_users = []
+
+            # Seul le message a été renseigné ou bien un canal
+            if len(cmd) == 2 or cmd[1].startswith('#'):
+                chan = (
+                    # Canal courant de l'expéditeur
+                    self.users[nickname]["channel"] if len(cmd) == 2
+                    # Canal renseigné dans la commande
+                    else cmd[1])
+
+                if len(cmd) == 3 and cmd[1].startswith('#'):
+                    # Est-ce que le canal existe ?
+                    if chan not in self.channels:
+                        self.__send(CHANNEL_ERROR, nickname)
+                        return
+                    # On ne peut pas envoyer un message sur un canal privé
+                    if self.channels[chan]["key"] is not None:
+                        self.__send(CHANNEL_KEY_ERROR, nickname)
+                        return
+
+                msg = f"{chan} <{nickname}> "+msg
+                # Envoi du message à tous les utilisateurs connectés au canal
+                dest_users = self.channels[chan]["users"]
+
+            # Destinataire renseigné sans canal
+            else:
+                # Est-ce que l'utilisateur existe ?
+                if cmd[1] not in self.users:
+                    self.__send(NICKNAME_ERROR, nickname)
+                msg = f"<{nickname}> "+msg
+                dest_users = [cmd[1]]
+
+            # Diffusion du message
+            self.__broadcast(msg.encode('utf-8'), dest_users)
