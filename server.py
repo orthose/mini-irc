@@ -119,14 +119,15 @@ def exec_cmd(sc):
                         channels[chan]["users"].add(nickname)
 
                     # Déconnexion de l'utilisateur du canal précédent
-                    with channels[users[nickname]["channel"]]["lock_users"]:
-                        channels[users[nickname]["channel"]]["users"].remove(nickname)
+                    if users[nickname]["channel"] != chan:
+                        with channels[users[nickname]["channel"]]["lock_users"]:
+                            channels[users[nickname]["channel"]]["users"].remove(nickname)
 
                     # Connexion de l'utilisateur au canal choisi
                     users[nickname]["channel"] = chan
 
                     # Envoi du canal au client
-                    sc.send(chan.encode('utf-8'))
+                    sc.send(("/join "+chan).encode('utf-8'))
 
                 # La clé de sécurité est incorrecte
                 else:

@@ -34,8 +34,16 @@ if channel == nickname_error:
 # On attend que le serveur nous envoie des messages
 def recv_msg():
     while True:
-        msg = s.recv(1024)
-        print('\r'+msg.decode('utf-8'), end=f'\n{channel} <{nickname}> ')
+        msg = s.recv(1024).decode('utf-8')
+
+        # Exécution éventuelle du retour de commande du serveur
+        if msg.startswith("/join"):
+            channel = msg.split()[1]
+            print(f'\r{channel} <{nickname}> ', end='')
+
+        # Affichage d'un message
+        else:
+            print('\r'+msg, end=f'\n{channel} <{nickname}> ')
 
 threading.Thread(target=recv_msg, daemon=True).start()
 
