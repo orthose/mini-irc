@@ -1,6 +1,7 @@
 # Constantes pour le protocole de communication entre serveur et client
 
 # Le pseudo choisi par l'utilisateur est déjà utilisé
+# L'utilisateur n'existe pas donc on ne peut pas l'inviter
 NICKNAME_ERROR = "NICKNAME_ERROR".encode('utf-8')
 
 # Les arguments de la commande sont incorrects

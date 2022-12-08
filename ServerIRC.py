@@ -53,6 +53,8 @@ class ServerIRC:
         :return: True si le client a bien été ajouté False sinon
         """
         # Enregistrement de l'utilisateur s'il n'existe pas déjà
+        # Deux clients choisissant le même nickname ne peuvent passer
+        # en même temps cette section critique
         self.lock_users.acquire()
         if nickname in self.users:
             self.lock_users.release()
@@ -110,6 +112,41 @@ class ServerIRC:
         """
         sc, lock_sc = self.__socket(nickname)
         with lock_sc: sc.send(self.help_msg)
+
+
+    def invite(self, cmd: List[str], nickname: str):
+        """
+        Invite un utilisateur sur le canal où on se trouve.
+
+        :param cmd: Liste de la commande décomposée selon les espaces
+        :param nickname: Pseudo de l'utilisateur
+        """
+        sc, lock_sc = self.__socket(nickname)
+
+        # Nombre d'arguments invalide
+        if len(cmd) != 2:
+            with lock_sc: sc.send(ARGUMENT_ERROR)
+        else:
+            dest_nick = cmd[1]  # Pseudo du destinataire
+            # Il ne faut pas que le client destinataire soit supprimé
+            # pendant cette section critique
+            self.lock_users.acquire()
+            # Le destinataire n'existe pas
+            if dest_nick not in self.users:
+                self.lock_users.release()
+                with lock_sc: sc.send(NICKNAME_ERROR)
+            else:
+                sc_dest, lock_sc_dest = self.__socket(dest_nick)
+                # Canal courant de l'utilisateur invitant
+                chan = self.users[nickname]["channel"]
+                key = self.channels[chan]["key"]
+                invite = f"<{nickname}> Bonjour <{dest_nick}> je t'invite à me rejoindre sur le canal {chan}."
+                # Le canal est-il protégé par une clé de sécurité ?
+                if key is not None:
+                    invite += f"\nMot de passe : [{key}]."
+                # Envoi de l'invitation au destinataire
+                with lock_sc_dest: sc_dest.send(invite.encode('utf-8'))
+                self.lock_users.release()
 
 
     def join(self, cmd: List[str], nickname: str):

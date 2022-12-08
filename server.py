@@ -47,8 +47,8 @@ def exec_cmd(sc):
 
     logging(f"<{nickname}> is connected")
     while True:
-        print(server.channels)
-        print(server.users)
+        #print(server.channels)
+        #print(server.users)
         # On ne gère pas les messages tronqués pour le moment
         cmd = sc.recv(1024).decode('utf-8').split()
         logging(f"<{nickname}> {' '.join(cmd)}")
@@ -56,6 +56,9 @@ def exec_cmd(sc):
         # Exécution de la commande
         if cmd[0] == "/help":
             server.help(nickname)
+
+        elif cmd[0] == "/invite":
+            server.invite(cmd, nickname)
 
         elif cmd[0] == "/join":
             server.join(cmd, nickname)
