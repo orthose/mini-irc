@@ -1,11 +1,12 @@
 import socket
 import threading
 import datetime as dt
+from protocol import *
 
 def logging(msg):
     print(f"[{dt.datetime.now().strftime('%Y-%d-%m %H:%M:%S')}] {msg}")
 
-help = \
+HELP = \
 """/away [message]  Signale son absence quand on nous envoie un message en privé
                  (en réponse un message peut être envoyé).
                  Une nouvelle commande /away réactive l’utilisateur.
@@ -25,17 +26,9 @@ help = \
 /names [channel]  Affiche les utilisateurs connectés à un canal. Si le canal n’est pas spécifié,
                   affiche tous les utilisateurs de tous les canaux.
 
-/exit  Quitte l'IRC en fermant la connexion avec le serveur."""
+/exit  Quitte l'IRC en fermant la connexion avec le serveur.""".encode('utf-8')
 
 default_channel = "#default"
-
-nickname_error = "NICKNAME_ERROR"
-
-argument_error = "ARGUMENT_ERROR"
-
-channel_key_error = "CHANNEL_KEY_ERROR"
-
-default_error = "DEFAULT_ERROR"
 
 # ATTENTION: Les collections ne sont pas thread-safe
 # et doivent être verrouillées en lecture / écriture / suppression
@@ -53,6 +46,7 @@ users = dict()
 
 # TODO: Décomposer en sous-fonction chaque commande
 def exec_cmd(sc):
+    global lock_channels, channels, lock_users, users
     ### Étape 1 : Protocole d'initialisation de la connexion ###
 
     # Récupération du nickname
@@ -62,7 +56,7 @@ def exec_cmd(sc):
     lock_users.acquire()
     if nickname in users:
         lock_users.release()
-        sc.send(nickname_error.encode('utf-8'))
+        sc.send(NICKNAME_ERROR)
         sc.close()
         return
     else:
@@ -91,11 +85,11 @@ def exec_cmd(sc):
 
         # Exécution de la commande
         if cmd[0] == "/help":
-            sc.send(help.encode('utf-8'))
+            sc.send(HELP)
 
         elif cmd[0] == "/join":
             if not (2 <= len(cmd) <= 3):
-                sc.send(argument_error.encode('utf-8'))
+                sc.send(ARGUMENT_ERROR)
             else:
                 chan = '#'+cmd[1].replace('#', '')
 
@@ -126,7 +120,7 @@ def exec_cmd(sc):
 
                 # La clé de sécurité est incorrecte
                 else:
-                    sc.send(channel_key_error.encode('utf-8'))
+                    sc.send(CHANNEL_KEY_ERROR)
 
         # Si le socket est brisé il faudra réaliser les mêmes opérations
         elif cmd[0] == "/exit":
@@ -144,8 +138,9 @@ def exec_cmd(sc):
             sc.close()
             break
 
+        # Commande inconnue
         else:
-            sc.send(default_error.encode('utf-8'))
+            sc.send(UNKNOWN_CMD_ERROR)
         # On fermera la connexion avec le client dans l'architecture pair à pair
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
