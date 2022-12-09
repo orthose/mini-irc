@@ -3,10 +3,10 @@ import threading
 import sys
 from protocol import *
 
-nickname = sys.argv[1]
+nick = sys.argv[1]
 
 WELCOME = \
-f"""Bienvenue <{nickname}> sur Mini IRC
+f"""Bienvenue <{nick}> sur Mini IRC
 Tapez /help pour voir les commandes"""
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -16,20 +16,20 @@ s.connect(("localhost", 9999))
 ### Étape 1 : Protocole d'initialisation de la connexion ###
 
 # On commence par envoyer notre nickname
-s.send(nickname.encode('utf-8'))
+s.send(nick.encode('utf-8'))
 
 # On récupère ensuite le nom du canal par défaut
 channel = s.recv(1024)
 
 # Si le nickname est déjà pris il faut en choisir un autre
 if channel == NICKNAME_ERROR:
-    print(f"Le pseudo <{nickname}> est déjà utilisé.")
+    print(f"Le pseudo <{nick}> est déjà utilisé.")
     exit(1)
 
 channel = channel.decode('utf-8')
 
 def prompt():
-    return f'{channel} <{nickname}> '
+    return f'{channel} <{nick}> '
 
 def clear_line():
     print('\r'+' '*len(prompt()), end='')

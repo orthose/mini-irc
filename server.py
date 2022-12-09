@@ -39,19 +39,19 @@ def exec_cmd(sc):
     ### Étape 1 : Protocole d'initialisation de la connexion ###
 
     # Récupération du nickname
-    nickname = sc.recv(1024).decode('utf-8')
+    nick = sc.recv(1024).decode('utf-8')
 
     # Enregistrement du nouvel utilisateur
-    if not server.add_user(sc, nickname): return
+    if not server.add_user(sc, nick): return
 
     ### Étape 2 : Réception et exécution des commandes client ###
 
-    logging(f"<{nickname}> is connected")
+    logging(f"<{nick}> is connected")
     while True:
         # On ne gère pas les messages tronqués pour le moment
         raw_cmd = sc.recv(1024).decode('utf-8').strip()
         cmd = raw_cmd.split()
-        logging(f"<{nickname}> {raw_cmd}")
+        logging(f"<{nick}> {raw_cmd}")
 
         # Si la commande est vide alors le socket est brisé
         if len(cmd) == 0:
@@ -59,33 +59,33 @@ def exec_cmd(sc):
 
         # Exécution de la commande
         if cmd[0] == "/help":
-            server.help(nickname)
+            server.help(nick)
 
         elif cmd[0] == "/invite":
-            server.invite(cmd, nickname)
+            server.invite(cmd, nick)
 
         elif cmd[0] == "/join":
-            server.join(cmd, nickname)
+            server.join(cmd, nick)
 
         elif cmd[0] == "/list":
-            server.list(nickname)
+            server.list(nick)
 
         elif cmd[0] == "/msg":
             # Reformatage de la commande pour prendre en compte les quotes
             cmd = shlex.split(raw_cmd, posix=True)
-            server.msg(cmd, nickname)
+            server.msg(cmd, nick)
 
         elif cmd[0] == "/names":
-            server.names(cmd, nickname)
+            server.names(cmd, nick)
 
         elif cmd[0] == "/exit":
-            logging(f"<{nickname}> is disconnected")
-            server.exit(nickname)
+            logging(f"<{nick}> is disconnected")
+            server.exit(nick)
             break
 
         # Commande inconnue
         else:
-            server.unknown_cmd(nickname)
+            server.unknown_cmd(nick)
 
         # On fermera la connexion avec le client dans l'architecture pair à pair
 
