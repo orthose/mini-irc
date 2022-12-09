@@ -1,9 +1,13 @@
+import sys
 import socket
 import threading
 import datetime as dt
 import shlex
 from ServerIRC import ServerIRC
 
+
+host = sys.argv[1]
+port = int(sys.argv[2])
 
 def logging(msg):
     print(f"[{dt.datetime.now().strftime('%Y-%d-%m %H:%M:%S')}] {msg}")
@@ -105,7 +109,7 @@ def exec_cmd(sc):
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-s.bind(("localhost", 9999))
+s.bind((host, port))
 # Le serveur peut traiter jusqu'à 100 connexions
 s.listen(100)
 

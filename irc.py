@@ -1,9 +1,12 @@
+import sys
 import socket
 import threading
-import sys
 from protocol import *
 
+
 nick = sys.argv[1]
+host = sys.argv[2]
+port = int(sys.argv[3])
 
 WELCOME = \
 f"""Bienvenue <{nick}> sur Mini IRC
@@ -11,7 +14,7 @@ Tapez /help pour voir les commandes"""
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-s.connect(("localhost", 9999))
+s.connect((host, port))
 
 ### Étape 1 : Protocole d'initialisation de la connexion ###
 
