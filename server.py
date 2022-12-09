@@ -4,6 +4,7 @@ import datetime as dt
 import shlex
 from ServerIRC import ServerIRC
 
+
 def logging(msg):
     print(f"[{dt.datetime.now().strftime('%Y-%d-%m %H:%M:%S')}] {msg}")
 
@@ -30,6 +31,7 @@ HELP = \
 /exit  Pour quitter le serveur IRC proprement.""".encode('utf-8')
 
 DEFAULT_CHANNEL = "#default"
+
 
 # Initialisation du seveur IRC
 server = ServerIRC(help_msg=HELP, default_channel=DEFAULT_CHANNEL)
@@ -61,6 +63,12 @@ def exec_cmd(sc):
         if cmd[0] == "/help":
             server.help(nick)
 
+        elif cmd[0] == "/away":
+            # Reformatage de la commande pour prendre en compte les quotes
+            try: cmd = shlex.split(raw_cmd, posix=True)
+            except ValueError: continue
+            server.away(cmd, nick)
+
         elif cmd[0] == "/invite":
             server.invite(cmd, nick)
 
@@ -72,7 +80,8 @@ def exec_cmd(sc):
 
         elif cmd[0] == "/msg":
             # Reformatage de la commande pour prendre en compte les quotes
-            cmd = shlex.split(raw_cmd, posix=True)
+            try: cmd = shlex.split(raw_cmd, posix=True)
+            except ValueError: continue
             server.msg(cmd, nick)
 
         elif cmd[0] == "/names":
@@ -87,7 +96,6 @@ def exec_cmd(sc):
         else:
             server.unknown_cmd(nick)
 
-        # On fermera la connexion avec le client dans l'architecture pair à pair
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

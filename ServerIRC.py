@@ -40,21 +40,52 @@ class ServerIRC:
 
 
     def __socket(self, nick: str) -> Tuple[socket.socket, threading.Lock]:
+        """
+        Permet d'obtenir le socket et le verrou associé à un client.
+
+        :param nick: Pseudo de l'utilisateur
+        :return: (socket, verrou) du client
+        """
         return (self.users[nick]["socket"], self.users[nick]["lock_socket"])
 
 
-    def __send(self, msg: bytes, nick: str):
-        sc, lock_sc = self.__socket(nick)
-        with lock_sc: sc.send(msg)
+    def __send(self, msg: bytes, nick: str, check_nick=False):
+        """
+        Permet d'envoyer un message à un client en verrouillant son socket.
+        Si le socket est brisé alors le message n'est simplement pas envoyé
+        et l'erreur n'est pas remontée.
+
+        :param msg: Message binaire à envoyer
+        :param nick: Pseudo de l'utilisateur destinataire
+        :param check_nick: Si True alors si le client n'existe pas
+        aucune erreur n'est remontée sinon une erreur est remontée
+        """
+        # Il faut s'assurer que le destinataire n'est pas supprimé
+        # pendant que l'on récupère son socket
+        if check_nick: self.lock_users.acquire()
+        # Si le client n'existe pas on ne fait rien
+        if not check_nick or nick in self.users:
+            sc, lock_sc = self.__socket(nick)
+            if check_nick: self.lock_users.release()
+            # On verrouille l'accès au socket du client
+            with lock_sc:
+                try: sc.send(msg)
+                # Si le socket est brisé le message n'est pas envoyé
+                # L'erreur n'est pas remontée pour éviter d'interrompre le thread
+                except BrokenPipeError: pass
+            return
+        self.lock_users.release()
 
 
-    def __broadcast(self, msg: bytes, dest_users: List[str]):
-        # Envoi du message à un ensemble d'utilisateurs
-        for dest_nick in dest_users:
-            # Il faut s'assurer que le destinataire n'est pas supprimé
-            with self.lock_users:
-                # Que se passe-t-il si un socket est cassé ?
-                if dest_nick in self.users: self.__send(msg, dest_nick)
+    def __broadcast(self, msg: bytes, exp_nick: str, dest_users: List[str]):
+        """
+        Permet de diffuser un message à un ensemble d'utilisateurs.
+
+        :param msg: Message binaire à envoyer
+        :param exp_nick: Pseudo de l'expéditeur
+        :param dest_users: Pseudo des clients destinataires
+        """
+        for dest_nick in dest_users: self.__send(msg, dest_nick, check_nick=True)
 
 
     def add_user(self, socket_client: socket.socket, nick: str) -> bool:
@@ -75,15 +106,16 @@ class ServerIRC:
             socket_client.send(NICKNAME_ERROR)
             socket_client.close()
             return False
-        else:
-            self.users[nick] = {
-                "channel": self.default_channel,
-                "socket": socket_client,
-                "lock_socket": threading.Lock()}
-            self.lock_users.release()
 
-            # Envoi au client du nom du canal par défaut
-            socket_client.send(self.default_channel.encode('utf-8'))
+        self.users[nick] = {
+            "channel": self.default_channel,
+            "away_msg": "",
+            "socket": socket_client,
+            "lock_socket": threading.Lock()}
+        self.lock_users.release()
+
+        # Envoi au client du nom du canal par défaut
+        socket_client.send(self.default_channel.encode('utf-8'))
 
         # Ajout de l'utilisateur au canal par défaut
         self.channels[self.default_channel]["users"].add(nick)
@@ -102,7 +134,8 @@ class ServerIRC:
         self.channels[self.users[nick]["channel"]]["users"].remove(nick)
 
         # On supprime l'utilisateur
-        self.users.pop(nick)
+        # Il faut verrouiller pour ne pas faire échouer l'envoi de message
+        with self.lock_users: self.users.pop(nick)
 
         # On ferme la connexion et on arrête le thread
         with lock_sc: sc.close()
@@ -115,6 +148,33 @@ class ServerIRC:
         :param nick: Pseudo de l'utilisateur
         """
         self.__send(UNKNOWN_CMD_ERROR, nick)
+
+
+    def away(self, cmd, nick: str):
+        """
+        Signale son absence quand on nous envoie un message en privé
+        (en réponse un message peut être envoyé).
+        Une nouvelle commande /away réactive l’utilisateur.
+
+        :param cmd: Liste de la commande décomposée selon les espaces
+        :param nick: Pseudo de l'utilisateur
+        """
+        # Nombre d'arguments invalide
+        if len(cmd) > 2:
+            self.__send(ARGUMENT_ERROR, nick)
+            return
+
+        with self.lock_users:
+            # L'utilisateur prévient qu'il n'est plus absent
+            if len(cmd) == 1 and self.users[nick]["away_msg"] != "":
+                self.users[nick]["away_msg"] = ""
+            # L'utilisateur prévient qu'il est absent
+            else:
+                # Message par défaut
+                away_msg = f"<{nick}> est absent pour le moment."
+                # Message personnalisé
+                if len(cmd) == 2: away_msg = cmd[1]
+                self.users[nick]["away_msg"] = away_msg
 
 
     def help(self, nick: str):
@@ -136,26 +196,28 @@ class ServerIRC:
         # Nombre d'arguments invalide
         if len(cmd) != 2:
             self.__send(ARGUMENT_ERROR, nick)
-        else:
-            dest_nick = cmd[1]  # Pseudo du destinataire
-            # Il ne faut pas que le client destinataire soit supprimé
-            # pendant cette section critique
-            self.lock_users.acquire()
-            # Le destinataire n'existe pas
-            if dest_nick not in self.users:
-                self.lock_users.release()
-                self.__send(NICKNAME_ERROR, nick)
-            else:
-                # Canal courant de l'utilisateur invitant
-                chan = self.users[nick]["channel"]
-                key = self.channels[chan]["key"]
-                invite = f"<{nick}> Bonjour <{dest_nick}> je t'invite à me rejoindre sur le canal {chan}."
-                # Le canal est-il protégé par une clé de sécurité ?
-                if key is not None:
-                    invite += f"\nMot de passe : [{key}]."
-                # Envoi de l'invitation au destinataire
-                self.__send(invite.encode('utf-8'), dest_nick)
-                self.lock_users.release()
+            return
+
+        dest_nick = cmd[1] # Pseudo du destinataire
+        # Il ne faut pas que le client destinataire soit supprimé
+        # pendant cette section critique
+        self.lock_users.acquire()
+        # Le destinataire n'existe pas
+        if dest_nick not in self.users:
+            self.lock_users.release()
+            self.__send(NICKNAME_ERROR, nick)
+            return
+
+        # Canal courant de l'utilisateur invitant
+        chan = self.users[nick]["channel"]
+        self.lock_users.release()
+        key = self.channels[chan]["key"]
+        invite = f"<{nick}> Bonjour <{dest_nick}> je t'invite à me rejoindre sur le canal {chan}."
+        # Le canal est-il protégé par une clé de sécurité ?
+        if key is not None:
+            invite += f"\nMot de passe : [{key}]."
+        # Envoi de l'invitation au destinataire
+        self.__send(invite.encode('utf-8'), dest_nick)
 
 
     def join(self, cmd: List[str], nick: str):
@@ -169,35 +231,37 @@ class ServerIRC:
         # Nombre d'arguments invalide
         if not (2 <= len(cmd) <= 3):
             self.__send(ARGUMENT_ERROR, nick)
-        else:
-            chan = '#'+cmd[1].replace('#', '')
+            return
 
-            key = None
-            if len(cmd) == 3:
-                key = cmd[2]
+        # Reformatage du nom de canal
+        chan = '#'+cmd[1].replace('#', '')
 
-            # Création éventuelle du canal
-            with self.lock_channels:
-                if chan not in self.channels:
-                    self.channels[chan] = {"key": key, "users": set()}
+        key = None
+        if len(cmd) == 3:
+            key = cmd[2]
 
-            # Connexion au canal
-            if self.channels[chan]["key"] == key:
-                self.channels[chan]["users"].add(nick)
+        # Création éventuelle du canal
+        with self.lock_channels:
+            if chan not in self.channels:
+                self.channels[chan] = {"key": key, "users": set()}
 
-                # Déconnexion de l'utilisateur du canal précédent
-                if self.users[nick]["channel"] != chan:
-                    self.channels[self.users[nick]["channel"]]["users"].remove(nick)
+        # La clé de sécurité est incorrecte
+        if self.channels[chan]["key"] != key:
+            self.__send(CHANNEL_KEY_ERROR, nick)
+            return
 
-                # Connexion de l'utilisateur au canal choisi
-                self.users[nick]["channel"] = chan
+        # Ajout de l'utilisateur au canal
+        self.channels[chan]["users"].add(nick)
 
-                # Envoi du canal au client
-                self.__send(("/join "+chan).encode('utf-8'), nick)
+        # Déconnexion de l'utilisateur du canal précédent
+        if self.users[nick]["channel"] != chan:
+            self.channels[self.users[nick]["channel"]]["users"].remove(nick)
 
-            # La clé de sécurité est incorrecte
-            else:
-                self.__send(CHANNEL_KEY_ERROR, nick)
+        # Connexion de l'utilisateur au canal choisi
+        self.users[nick]["channel"] = chan
+
+        # Envoi du canal au client
+        self.__send(("/join "+chan).encode('utf-8'), nick)
 
 
     def list(self, nick: str):
@@ -221,42 +285,55 @@ class ServerIRC:
         # Nombre d'arguments invalide
         if not (2 <= len(cmd) <= 3):
             self.__send(ARGUMENT_ERROR, nick)
+            return
+
+        msg = cmd[-1]
+        dest_users = []
+
+        # Seul le message a été renseigné ou bien un canal
+        if len(cmd) == 2 or cmd[1].startswith('#'):
+            chan = (
+                # Canal courant de l'expéditeur
+                self.users[nick]["channel"] if len(cmd) == 2
+                # Canal renseigné dans la commande
+                else cmd[1])
+
+            if len(cmd) == 3 and cmd[1].startswith('#'):
+                # Est-ce que le canal existe ?
+                if chan not in self.channels:
+                    self.__send(CHANNEL_ERROR, nick)
+                    return
+                # On ne peut pas envoyer un message sur un canal privé
+                if self.channels[chan]["key"] is not None:
+                    self.__send(CHANNEL_KEY_ERROR, nick)
+                    return
+
+            msg = f"{chan} <{nick}> "+msg
+            # Envoi du message à tous les utilisateurs connectés au canal
+            dest_users = self.channels[chan]["users"]
+
+        # Destinataire renseigné sans canal
         else:
-            msg = cmd[-1]
-            dest_users = []
-
-            # Seul le message a été renseigné ou bien un canal
-            if len(cmd) == 2 or cmd[1].startswith('#'):
-                chan = (
-                    # Canal courant de l'expéditeur
-                    self.users[nick]["channel"] if len(cmd) == 2
-                    # Canal renseigné dans la commande
-                    else cmd[1])
-
-                if len(cmd) == 3 and cmd[1].startswith('#'):
-                    # Est-ce que le canal existe ?
-                    if chan not in self.channels:
-                        self.__send(CHANNEL_ERROR, nick)
-                        return
-                    # On ne peut pas envoyer un message sur un canal privé
-                    if self.channels[chan]["key"] is not None:
-                        self.__send(CHANNEL_KEY_ERROR, nick)
-                        return
-
-                msg = f"{chan} <{nick}> "+msg
-                # Envoi du message à tous les utilisateurs connectés au canal
-                dest_users = self.channels[chan]["users"]
-
-            # Destinataire renseigné sans canal
+            dest_nick = cmd[1]
+            self.lock_users.acquire()
+            # Est-ce que l'utilisateur existe ?
+            if dest_nick not in self.users:
+                self.lock_users.release()
+                self.__send(NICKNAME_ERROR, nick)
+                return
+            # L'utilisateur est-il absent ?
             else:
-                # Est-ce que l'utilisateur existe ?
-                if cmd[1] not in self.users:
-                    self.__send(NICKNAME_ERROR, nick)
-                msg = f"<{nick}> "+msg
-                dest_users = [cmd[1]]
+                away_msg = self.users[dest_nick]["away_msg"]
+                self.lock_users.release()
+                if away_msg != "":
+                    self.__send(away_msg.encode('utf-8'), nick)
+                    return
 
-            # Diffusion du message
-            self.__broadcast(msg.encode('utf-8'), dest_users)
+            msg = f"<{nick}> "+msg
+            dest_users = [dest_nick]
+
+        # Diffusion du message
+        self.__broadcast(msg.encode('utf-8'), nick, dest_users)
 
 
     def names(self, cmd, nick):
@@ -272,6 +349,7 @@ class ServerIRC:
         # Nombre d'aguments invalide
         if len(cmd) > 2:
             self.__send(ARGUMENT_ERROR, nick)
+
         # Canal spécifié
         elif len(cmd) == 2:
             chan = '#'+cmd[1].replace('#', '')
@@ -280,6 +358,7 @@ class ServerIRC:
                 self.__send(CHANNEL_ERROR, nick)
                 return
             list_names = '\n'.join(self.channels[chan]["users"])
+
         # Pas de canal spécifié
         else:
             list_names = '\n'.join(self.users.keys())
