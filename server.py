@@ -73,6 +73,9 @@ def exec_cmd(sc):
             cmd = shlex.split(raw_cmd, posix=True)
             server.msg(cmd, nickname)
 
+        elif cmd[0] == "/names":
+            server.names(cmd, nickname)
+
         # Si le socket est brisé il faudra réaliser les mêmes opérations
         elif cmd[0] == "/exit":
             logging(f"<{nickname}> is disconnected")

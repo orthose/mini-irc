@@ -53,6 +53,7 @@ class ServerIRC:
         for dest_nick in dest_users:
             # Il faut s'assurer que le destinataire n'est pas supprimé
             with self.lock_users:
+                # Que se passe-t-il si un socket est cassé ?
                 if dest_nick in self.users: self.__send(msg, dest_nick)
 
 
@@ -256,3 +257,31 @@ class ServerIRC:
 
             # Diffusion du message
             self.__broadcast(msg.encode('utf-8'), dest_users)
+
+
+    def names(self, cmd, nickname):
+        """
+        Affiche les utilisateurs connectés à un canal. Si le canal n’est pas spécifié,
+        affiche tous les utilisateurs de tous les canaux.
+
+        :param cmd: Liste de la commande décomposée selon les espaces
+        :param nickname: Pseudo de l'utilisateur
+        """
+        list_names = ""
+
+        # Nombre d'aguments invalide
+        if len(cmd) > 2:
+            self.__send(ARGUMENT_ERROR, nickname)
+        # Canal spécifié
+        elif len(cmd) == 2:
+            chan = '#'+cmd[1].replace('#', '')
+            # Est-ce que le canal existe ?
+            if chan not in self.channels:
+                self.__send(CHANNEL_ERROR, nickname)
+                return
+            list_names = '\n'.join(self.channels[chan]["users"])
+        # Pas de canal spécifié
+        else:
+            list_names = '\n'.join(self.users.keys())
+
+        self.__send(list_names.encode('utf-8'), nickname)
