@@ -31,10 +31,12 @@ class ServerIRC:
         self.default_channel = default_channel
 
         # Dictionnaire des informations utilisateurs
+        # Contrainte: Les utilisateurs peuvent être supprimés
         self.lock_users = threading.Lock()
         self.users = dict()
 
         # Dictionnaire des canaux avec ensemble des utilisateurs connectés
+        # Simplification: Les canaux ne peuvent pas être supprimés
         self.lock_channels = threading.Lock()
         self.channels = {default_channel: {"key": None, "users": set()}}
 
@@ -58,7 +60,16 @@ class ServerIRC:
         :param msg: Message binaire à envoyer
         :param nick: Pseudo de l'utilisateur destinataire
         :param check_nick: Si True alors si le client n'existe pas
-        aucune erreur n'est remontée sinon une erreur est remontée
+        aucune erreur n'est remontée sinon une erreur est remontée.
+
+        Par défaut check_nick=False puisqu'un client pour lequel on exécute
+        une commande ne peut pas être supprimé car son code est exécuté
+        séquentiellement dans un seul thread. Or, il ne pourra être supprimé
+        que lors de l'appel à la commande /exit.
+
+        Par contre il faut choisir check_nick=True si on envoie un message
+        à un autre utilisateur que l'expéditeur vivant dans un thread séparé
+        car il peut potentiellement être supprimé.
         """
         # Il faut s'assurer que le destinataire n'est pas supprimé
         # pendant que l'on récupère son socket
@@ -98,7 +109,7 @@ class ServerIRC:
         :return: True si le client a bien été ajouté False sinon
         """
         # Enregistrement de l'utilisateur s'il n'existe pas déjà
-        # Deux clients choisissant le même nickname ne peuvent passer
+        # Deux clients choisissant le même nickname ne doivent pas passer
         # en même temps cette section critique
         self.lock_users.acquire()
         if nick in self.users:
@@ -173,17 +184,16 @@ class ServerIRC:
             self.__send(ARGUMENT_ERROR, nick)
             return
 
-        with self.lock_users:
-            # L'utilisateur prévient qu'il n'est plus absent
-            if len(cmd) == 1 and self.users[nick]["away_msg"] != "":
-                self.users[nick]["away_msg"] = ""
-            # L'utilisateur prévient qu'il est absent
-            else:
-                # Message par défaut
-                away_msg = f"<{nick}> est absent pour le moment."
-                # Message personnalisé
-                if len(cmd) == 2: away_msg = cmd[1]
-                self.users[nick]["away_msg"] = away_msg
+        # L'utilisateur prévient qu'il n'est plus absent
+        if len(cmd) == 1 and self.users[nick]["away_msg"] != "":
+            self.users[nick]["away_msg"] = ""
+        # L'utilisateur prévient qu'il est absent
+        else:
+            # Message par défaut
+            away_msg = f"<{nick}> est absent pour le moment."
+            # Message personnalisé
+            if len(cmd) == 2: away_msg = cmd[1]
+            self.users[nick]["away_msg"] = away_msg
 
 
     def help(self, nick: str):
@@ -208,25 +218,21 @@ class ServerIRC:
             return
 
         dest_nick = cmd[1] # Pseudo du destinataire
-        # Il ne faut pas que le client destinataire soit supprimé
-        # pendant cette section critique
-        self.lock_users.acquire()
         # Le destinataire n'existe pas
         if dest_nick not in self.users:
-            self.lock_users.release()
             self.__send(NICKNAME_ERROR, nick)
             return
 
         # Canal courant de l'utilisateur invitant
         chan = self.users[nick]["channel"]
-        self.lock_users.release()
+
         key = self.channels[chan]["key"]
         invite = f"<{nick}> Bonjour <{dest_nick}> je t'invite à me rejoindre sur le canal {chan}."
         # Le canal est-il protégé par une clé de sécurité ?
         if key is not None:
             invite += f"\nMot de passe : [{key}]."
         # Envoi de l'invitation au destinataire
-        self.__send(invite.encode('utf-8'), dest_nick)
+        self.__send(invite.encode('utf-8'), dest_nick, check_nick=True)
 
 
     def join(self, cmd: List[str], nick: str):
@@ -331,12 +337,11 @@ class ServerIRC:
                 self.__send(NICKNAME_ERROR, nick)
                 return
             # L'utilisateur est-il absent ?
-            else:
-                away_msg = self.users[dest_nick]["away_msg"]
-                self.lock_users.release()
-                if away_msg != "":
-                    self.__send(away_msg.encode('utf-8'), nick)
-                    return
+            away_msg = self.users[dest_nick]["away_msg"]
+            self.lock_users.release()
+            if away_msg != "":
+                self.__send(away_msg.encode('utf-8'), nick)
+                return
 
             msg = f"<{nick}> "+msg
             dest_users = [dest_nick]
