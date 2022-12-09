@@ -65,8 +65,11 @@ def exec_cmd(sc):
 
         elif cmd[0] == "/away":
             # Reformatage de la commande pour prendre en compte les quotes
-            try: cmd = shlex.split(raw_cmd, posix=True)
-            except ValueError: continue
+            try:
+                cmd = shlex.split(raw_cmd, posix=True)
+            except ValueError:
+                server.argument_error(nick)
+                continue
             server.away(cmd, nick)
 
         elif cmd[0] == "/invite":
@@ -80,8 +83,11 @@ def exec_cmd(sc):
 
         elif cmd[0] == "/msg":
             # Reformatage de la commande pour prendre en compte les quotes
-            try: cmd = shlex.split(raw_cmd, posix=True)
-            except ValueError: continue
+            try:
+                cmd = shlex.split(raw_cmd, posix=True)
+            except ValueError:
+                server.argument_error(nick)
+                continue
             server.msg(cmd, nick)
 
         elif cmd[0] == "/names":

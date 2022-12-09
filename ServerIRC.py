@@ -150,6 +150,15 @@ class ServerIRC:
         self.__send(UNKNOWN_CMD_ERROR, nick)
 
 
+    def argument_error(self, nick: str):
+        """
+        Permet de signaler au client que les arguments de la commande sont incorrects.
+
+        :param nick: Pseudo de l'utilisateur
+        """
+        self.__send(ARGUMENT_ERROR, nick)
+
+
     def away(self, cmd, nick: str):
         """
         Signale son absence quand on nous envoie un message en privé
