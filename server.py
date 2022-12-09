@@ -48,12 +48,14 @@ def exec_cmd(sc):
 
     logging(f"<{nickname}> is connected")
     while True:
-        #print(server.channels)
-        #print(server.users)
         # On ne gère pas les messages tronqués pour le moment
         raw_cmd = sc.recv(1024).decode('utf-8').strip()
         cmd = raw_cmd.split()
         logging(f"<{nickname}> {raw_cmd}")
+
+        # Si la commande est vide alors le socket est brisé
+        if len(cmd) == 0:
+            cmd.append("/exit")
 
         # Exécution de la commande
         if cmd[0] == "/help":
@@ -76,7 +78,6 @@ def exec_cmd(sc):
         elif cmd[0] == "/names":
             server.names(cmd, nickname)
 
-        # Si le socket est brisé il faudra réaliser les mêmes opérations
         elif cmd[0] == "/exit":
             logging(f"<{nickname}> is disconnected")
             server.exit(nickname)
