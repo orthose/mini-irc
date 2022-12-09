@@ -190,7 +190,7 @@ class ServerIRC:
         # L'utilisateur prévient qu'il est absent
         else:
             # Message par défaut
-            away_msg = f"<{nick}> est absent pour le moment."
+            away_msg = "Je suis absent pour le moment."
             # Message personnalisé
             if len(cmd) == 2: away_msg = cmd[1]
             self.users[nick]["away_msg"] = away_msg
@@ -318,6 +318,7 @@ class ServerIRC:
                 if chan not in self.channels:
                     self.__send(CHANNEL_ERROR, nick)
                     return
+
                 # On ne peut pas envoyer un message sur un canal privé
                 if self.channels[chan]["key"] is not None:
                     self.__send(CHANNEL_KEY_ERROR, nick)
@@ -330,21 +331,26 @@ class ServerIRC:
         # Destinataire renseigné sans canal
         else:
             dest_nick = cmd[1]
+
             self.lock_users.acquire()
-            # Est-ce que l'utilisateur existe ?
+            # Est-ce que le destinataire existe ?
             if dest_nick not in self.users:
                 self.lock_users.release()
                 self.__send(NICKNAME_ERROR, nick)
                 return
-            # L'utilisateur est-il absent ?
+
             away_msg = self.users[dest_nick]["away_msg"]
             self.lock_users.release()
-            if away_msg != "":
-                self.__send(away_msg.encode('utf-8'), nick)
-                return
 
-            msg = f"<{nick}> "+msg
-            dest_users = [dest_nick]
+            # Le destinataire est absent
+            if away_msg != "":
+                msg = f"<{dest_nick}> "+away_msg
+                dest_users = [nick]
+
+            # Le destinataire est présent
+            else:
+                msg = f"<{nick}> "+msg
+                dest_users = [dest_nick]
 
         # Diffusion du message
         self.__broadcast(msg.encode('utf-8'), nick, dest_users)
